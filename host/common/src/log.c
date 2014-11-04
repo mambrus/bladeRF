@@ -24,6 +24,9 @@
  */
 #ifdef LOGGING_ENABLED
 #include <log.h>
+#if defined(__linux__)
+#include <syslog.h>
+#endif
 #include <stdio.h>
 #include <stdarg.h>
 
@@ -38,7 +41,11 @@ void log_write(bladerf_log_level level, const char *format, ...)
 
         /* Write the log message */
         va_start(args, format);
+#if !defined(__linux__)
         vfprintf(stderr, format, args);
+#else
+        vsyslog(LOG_USER, format, args);
+#endif
         va_end(args);
     }
 }
