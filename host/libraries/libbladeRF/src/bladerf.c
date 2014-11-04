@@ -22,6 +22,9 @@
 #include <stdio.h>
 #include <string.h>
 #include <limits.h>
+#if defined(__linux__)
+#include <syslog.h>
+#endif
 #include "rel_assert.h"
 
 #include "libbladeRF.h"     /* Public API */
@@ -1090,6 +1093,10 @@ const char * bladerf_strerror(int error)
 
 void bladerf_version(struct bladerf_version *version)
 {
+#if !defined(WIN32) && !defined(__CYGWIN__)
+    openlog("bladeRF",
+        LOG_CONS | LOG_NDELAY  | LOG_NOWAIT | LOG_PERROR | LOG_PID, LOG_USER);
+#endif
     version->major = LIBBLADERF_VERSION_MAJOR;
     version->minor = LIBBLADERF_VERSION_MINOR;
     version->patch = LIBBLADERF_VERSION_PATCH;
