@@ -48,6 +48,8 @@ endif()
 
 option(ENABLE_LIBBLADERF_LOGGING "Enable log messages in libbladeRF." ON)
 
+option(ENABLE_LIBBLADERF_SYSLOG "Enable logging to syslog (non Windows only)" OFF)
+
 option(BUILD_LIBBLADERF_DOCUMENTATION "Build libbladeRF documentation. Requries Doxygen." ${BUILD_DOCUMENTATION})
 if(NOT ${BUILD_DOCUMENTATION})
     set(BUILD_LIBBLADERF_DOCUMENTATION OFF)
@@ -109,6 +111,10 @@ configure_file(
 ################################################################################
 if(ENABLE_LIBBLADERF_LOGGING)
     add_definitions(-DLOGGING_ENABLED)
+endif()
+
+if(ENABLE_LIBBLADERF_SYSLOG)
+    add_definitions(-DLOG_SYSLOG_ENABLED)
 endif()
 
 if(ENABLE_LOCK_CHECKS)

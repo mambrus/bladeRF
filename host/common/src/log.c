@@ -44,7 +44,11 @@ void log_write(bladerf_log_level level, const char *format, ...)
 #if !defined(__linux__)
         vfprintf(stderr, format, args);
 #else
+#  if defined (LOG_SYSLOG_ENABLED)
         vsyslog(LOG_USER, format, args);
+#  else
+        vfprintf(stderr, format, args);
+#  endif
 #endif
         va_end(args);
     }
