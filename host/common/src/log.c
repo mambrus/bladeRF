@@ -24,7 +24,7 @@
  */
 #ifdef LOGGING_ENABLED
 #include <log.h>
-#if defined(__linux__)
+#if !defined(WIN32) && !defined(__CYGWIN__) && defined(LOG_SYSLOG_ENABLED)
 #include <syslog.h>
 #endif
 #include <stdio.h>
@@ -41,7 +41,7 @@ void log_write(bladerf_log_level level, const char *format, ...)
 
         /* Write the log message */
         va_start(args, format);
-#if !defined(__linux__)
+#if defined(WIN32) || defined(__CYGWIN__)
         vfprintf(stderr, format, args);
 #else
 #  if defined (LOG_SYSLOG_ENABLED)

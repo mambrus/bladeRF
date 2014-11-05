@@ -21,22 +21,49 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <limits.h>
-#if defined(__linux__)
+#if !defined(WIN32) && !defined(__CYGWIN__) && defined(LOG_SYSLOG_ENABLED)
 #include <syslog.h>
 #endif
+#include "log.h"
 
+#if !defined(WIN32) && !defined(__CYGWIN__)
+#  if !defined(__clang__) && !defined(__GNUC__)
+#  error init/fini mechanism not known to work for your compiler.
+#  endif
 #define __init __attribute__((constructor))
 #define __fini __attribute__((destructor))
+#else
+/* Corresponding syntax for Windows (TBD) */
+#define __init
+#define __fini
+#endif
 
-/* Module initializers. Especially when used as library which doesn't have a
- * natural entry function. Use to set predefined/default states and cleanup.
+/* Module initializers/deinitializers. When used as library (who don't have
+ * a natural entry/exit function) these are used to initialize
+ * deinitialize. Use to set predefined/default states and cleanup.
+ *
+ * This will work with shared libraries as well as with static as they get
+ * invoked by RTL load/unload, with or without C++ code (i.e. functions will
+ * play nice with C++ normal ctors/dtors).
+ *
+ * Keep log in to at least once per new build-/run-environment assert that
+ * the mechanism works.
  */
+
 void __init __bladerf_init(void) {
-#if !defined(WIN32) && !defined(__CYGWIN__)
+#if !defined(WIN32) && !defined(__CYGWIN__) && defined(LOG_SYSLOG_ENABLED)
     openlog("bladeRF",
         LOG_CONS | LOG_NDELAY  | LOG_NOWAIT | LOG_PERROR | LOG_PID, LOG_USER);
+    bladerf_log_set_verbosity(BLADERF_LOG_LEVEL_INFO);
 #endif
+
+    log_info("BladeRF host software initializing");
 }
 
 void __fini __bladerf_fini(void) {
+    log_info("BladeRF host software deinitializing");
+	fflush(NULL);
+#if !defined(WIN32) && !defined(__CYGWIN__) && defined(LOG_SYSLOG_ENABLED)
+    closelog();
+#endif
 }
