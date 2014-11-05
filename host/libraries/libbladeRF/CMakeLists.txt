@@ -266,6 +266,7 @@ set(LIBBLADERF_SOURCE
         src/sync_worker.c
         src/tuning.c
         src/version_compat.c
+        src/init_fini.c
         ${BLADERF_HOST_COMMON_SOURCE_DIR}/sha256.c
         ${BLADERF_HOST_COMMON_SOURCE_DIR}/conversions.c
         ${BLADERF_HOST_COMMON_SOURCE_DIR}/log.c
