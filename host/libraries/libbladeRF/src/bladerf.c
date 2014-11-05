@@ -1099,6 +1099,9 @@ void bladerf_version(struct bladerf_version *version)
 void bladerf_log_set_verbosity(bladerf_log_level level)
 {
     log_set_verbosity(level);
+#if defined(LOG_SYSLOG_ENABLED)
+    log_info("Log verbosity has been set to: %d", level);
+#endif
 }
 
 /*------------------------------------------------------------------------------
