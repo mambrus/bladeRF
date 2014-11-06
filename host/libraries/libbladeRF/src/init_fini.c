@@ -78,6 +78,17 @@ void __init __bladerf_init(void) {
     bladerf_log_set_verbosity(BLADERF_LOG_LEVEL_INFO);
 #endif
 
+    bladerf_log_set_verbosity(BLADERF_LOG_LEVEL_DEBUG);
+    if (bladerf_open(&bdev, NULL) >= 0) {
+        log_debug("Device pre-initialize BLADERF_FORMAT_SC16_Q11");
+        if (perform_format_config(bdev, BLADERF_MODULE_RX, BLADERF_FORMAT_SC16_Q11) )
+            log_warning("Device found but could not set BLADERF_FORMAT_SC16_Q11 for RX");
+        if (perform_format_config(bdev, BLADERF_MODULE_TX, BLADERF_FORMAT_SC16_Q11) )
+            log_warning("Device found but could not set BLADERF_FORMAT_SC16_Q11 for TX");
+        bladerf_close(bdev);
+    } else
+        log_debug("No device found to pre-initialize");
+    bladerf_log_set_verbosity(BLADERF_LOG_LEVEL_INFO);
     log_info("BladeRF host initialized");
 }
 
