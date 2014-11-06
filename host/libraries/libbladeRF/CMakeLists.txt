@@ -45,10 +45,11 @@ endif()
 ################################################################################
 # Configuration options
 ################################################################################
-
 option(ENABLE_LIBBLADERF_LOGGING "Enable log messages in libbladeRF." ON)
 
 option(ENABLE_LIBBLADERF_SYSLOG "Enable logging to syslog (non Windows only)" OFF)
+
+option(LIBBLADERF_WAIT_DBG_TIMO "Delay in seconds upon load to wait for debugger sync" OFF)
 
 option(BUILD_LIBBLADERF_DOCUMENTATION "Build libbladeRF documentation. Requries Doxygen." ${BUILD_DOCUMENTATION})
 if(NOT ${BUILD_DOCUMENTATION})
@@ -118,6 +119,10 @@ endif()
 
 if(ENABLE_LIBBLADERF_SYSLOG)
     add_definitions(-DLOG_SYSLOG_ENABLED)
+endif()
+
+if(LIBBLADERF_WAIT_DBG_TIMO)
+    add_definitions(-DWAIT_FOR_DEBUGGER=${LIBBLADERF_WAIT_DBG_TIMO})
 endif()
 
 if(ENABLE_LOCK_CHECKS)

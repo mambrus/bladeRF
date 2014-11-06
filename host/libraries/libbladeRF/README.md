@@ -39,3 +39,4 @@ more information.
 | -DENABLE_LIBBLADERF_SYNC_LOG_VERBOSE=\<ON/OFF\>   | Enable log_verbose() calls in the sync interface's data path. Note that this may harm performance. Default: OFF      |
 | -DENABLE_LOCK_CHECKS=\<ON/OFF\>                   | Enable checks for lock acquistion failures (e.g., deadlock). Default: OFF                                            |
 | -DLIBUSB_PATH=\</path/to/libusb\>                 | Path to libusb files. This is generally only needed for Windows users who downloaded binary distributions.           |
+| -DLIBBLADERF_WAIT_DBG_TIMO:int=\<#sec\>           | Load but do not execute until debugger attaches or #sec time expires. Default: OFF (0)                               |
