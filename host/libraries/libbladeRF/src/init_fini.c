@@ -25,6 +25,7 @@
 #include <syslog.h>
 #endif
 #include "log.h"
+#include "bladerf_priv.h"
 
 #if !defined(WIN32) && !defined(__CYGWIN__)
 #  if !defined(__clang__) && !defined(__GNUC__)
@@ -50,19 +51,39 @@
  * the mechanism works.
  */
 
+#if defined(WAIT_FOR_DEBUGGER)
+#include <unistd.h>
+#include <signal.h>
+#define BREAK_HERE raise(SIGINT)
+int dloop=0;
+#endif
+
 void __init __bladerf_init(void) {
+    struct bladerf *bdev;
+
 #if !defined(WIN32) && !defined(__CYGWIN__) && defined(LOG_SYSLOG_ENABLED)
     openlog("bladeRF",
         LOG_CONS | LOG_NDELAY  | LOG_NOWAIT | LOG_PERROR | LOG_PID, LOG_USER);
     bladerf_log_set_verbosity(BLADERF_LOG_LEVEL_INFO);
 #endif
 
-    log_info("BladeRF host software initializing");
+#if defined(WAIT_FOR_DEBUGGER) && WAIT_FOR_DEBUGGER>0
+    bladerf_log_set_verbosity(BLADERF_LOG_LEVEL_VERBOSE);
+    while (dloop<WAIT_FOR_DEBUGGER) {
+        log_debug("Waiting for debugger to attach %d...",dloop++);
+        sleep(1);
+    }
+    if (dloop!=WAIT_FOR_DEBUGGER)
+        BREAK_HERE;
+    bladerf_log_set_verbosity(BLADERF_LOG_LEVEL_INFO);
+#endif
+
+    log_info("BladeRF host initialized");
 }
 
 void __fini __bladerf_fini(void) {
-    log_info("BladeRF host software deinitializing");
-	fflush(NULL);
+    log_info("BladeRF host deinitialized");
+    fflush(NULL);
 #if !defined(WIN32) && !defined(__CYGWIN__) && defined(LOG_SYSLOG_ENABLED)
     closelog();
 #endif
