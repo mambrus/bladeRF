@@ -59,7 +59,6 @@ int dloop=0;
 #endif
 
 void __init __bladerf_init(void) {
-    struct bladerf *bdev;
 
 #if !defined(WIN32) && !defined(__CYGWIN__) && defined(LOG_SYSLOG_ENABLED)
     openlog("bladeRF",
