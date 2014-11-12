@@ -1,19 +1,29 @@
-PROCNAME="transceiver"
-#GDB_CMD="sudo gdb.tap.sh ${@}"
-GDB_CMD="sudo gdb ${@}"
-#GDB_CMD="sudo kdbg ${@} -p"
+NARGS=$#
+PROCNAME=${1-"transceiver"}
+shift
+GARGS=${@-"transceiver-bladerf"}
 
-echo "GDB-attach waiting for $PROCNAME"
+if [ $NARGS -lt 2 ]; then
+	cat <<EOF
+$(basename $0) syntax error: $(basename $0) <procname> <GDB arguments>
+    Where <GDB arguments> is usually just one: binary-name
+EOF
+	exit 1
+fi
+
+
+echo "GDB-attach (PID=$$) waiting for $PROCNAME"
 
 while true; do
 	PID=$(ps -Al | grep $PROCNAME | awk '{print $4}')
 	if [ "x$PID" != "x" ]; then
 		echo
 		echo "$PROCNAME detected at: $PID"
+		echo "Attaching using: ${GARGS}"
 		echo ""
-		#$GDB_CMD $PID
-		
-		sudo kdbg -p $PID ${@}
+
+		#gdb $GARGS $PID
+		sudo kdbg -p $PID $GARGS
 	else
 		echo -n "."
 		sleep 1

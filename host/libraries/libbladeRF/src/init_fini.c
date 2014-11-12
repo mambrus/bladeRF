@@ -57,9 +57,9 @@
 #include <sys/stat.h>
 #include <string.h>
 #include <fcntl.h>
-#define BREAK_HERE raise(SIGINT)
 int dloop=0;
 
+#if !defined(WIN32) && !defined(__CYGWIN__)
 int IsDebuggerPresent(void)
 {
     char buf[1024];
@@ -77,11 +77,15 @@ int IsDebuggerPresent(void)
         char *tracer_pid = strstr(buf, TracerPid);
 
         if (tracer_pid)
-            debugger_present = !!atoi(tracer_pid + sizeof(TracerPid) - 1);
+            debugger_present = atoi(tracer_pid + sizeof(TracerPid) - 1);
     }
 
     return debugger_present;
 }
+#define BREAK_HERE raise(SIGINT)
+#else
+#define BREAK_HERE (void(0))
+#endif
 
 #endif
 
