@@ -1,7 +1,7 @@
 PROCNAME="transceiver"
 #GDB_CMD="sudo gdb.tap.sh ${@}"
-#GDB_CMD="sudo gdb ${@}"
-GDB_CMD="sudo kdbg ${@} -p"
+GDB_CMD="sudo gdb ${@}"
+#GDB_CMD="sudo kdbg ${@} -p"
 
 echo "GDB-attach waiting for $PROCNAME"
 
