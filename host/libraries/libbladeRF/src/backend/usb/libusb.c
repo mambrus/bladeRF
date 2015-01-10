@@ -435,6 +435,50 @@ static int find_and_open_device(libusb_context *context,
     return status;
 }
 
+#if ENABLE_LIBUSB_DEV_RESET_ON_OPEN
+static int reset_and_reopen(libusb_context *context,
+                            struct bladerf_lusb **dev,
+                            struct bladerf_devinfo *info)
+{
+    int status;
+
+    status = libusb_reset_device((*dev)->handle);
+    if (status == 0) {
+        log_verbose("USB port reset succeeded for bladeRF %s\n", info->serial);
+        return 0;
+    } else if (status == LIBUSB_ERROR_NO_DEVICE) {
+        struct bladerf_devinfo new_info;
+
+        /* The reset has caused the device to drop out and re-enumerate.
+         *
+         * We'll find it again via the info we gathered about it via its
+         * serial number, which is now stored in the devinfo
+         */
+        log_verbose("Re-scan required after port reset for bladeRF %s\n",
+                    info->serial);
+
+
+        libusb_release_interface((*dev)->handle, 0);
+        libusb_close((*dev)->handle);
+        *dev = NULL;
+
+        memcpy(&new_info, info, sizeof(new_info));
+        new_info.usb_bus  = DEVINFO_BUS_ANY;
+        new_info.usb_addr = DEVINFO_ADDR_ANY;
+
+        status = find_and_open_device(context, &new_info, dev, info);
+
+    } else {
+        status = BLADERF_ERR_IO;
+        log_verbose("Port reset failed for bladerf %s: %s\n",
+                    info->serial, libusb_error_name(status));
+    }
+
+    return status;
+}
+#endif
+
+
 static int lusb_open(void **driver,
                      struct bladerf_devinfo *info_in,
                      struct bladerf_devinfo *info_out)
@@ -473,7 +517,21 @@ static int lusb_open(void **driver,
         }
     } else {
         assert(lusb != NULL);
-        *driver = (void *) lusb;
+
+        /* Marian from Null Team (null.ro) and YateBTS(.com) found that it is
+         * possible to recover from "Issue #95: Not enough bandwidth for
+         * altsetting" by performing a USB port reset prior to actually trying
+         * to use the device.
+         */
+#       if ENABLE_LIBUSB_DEV_RESET_ON_OPEN
+        if (!getenv("BLADERF_SKIP_USB_DEV_RESET_ON_OPEN")) {
+            status = reset_and_reopen(context, &lusb, info_out);
+        }
+#       endif
+
+        if (status == 0) {
+            *driver = (void *) lusb;
+        }
     }
 
     return status;
