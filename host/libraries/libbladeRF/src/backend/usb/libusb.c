@@ -523,11 +523,9 @@ static int lusb_open(void **driver,
          * altsetting" by performing a USB port reset prior to actually trying
          * to use the device.
          */
-#       if ENABLE_LIBUSB_DEV_RESET_ON_OPEN
-        if (!getenv("BLADERF_SKIP_USB_DEV_RESET_ON_OPEN")) {
-            status = reset_and_reopen(context, &lusb, info_out);
-        }
-#       endif
+#if ENABLE_LIBUSB_DEV_RESET_ON_OPEN
+        status = reset_and_reopen(context, &lusb, info_out);
+#endif
 
         if (status == 0) {
             *driver = (void *) lusb;

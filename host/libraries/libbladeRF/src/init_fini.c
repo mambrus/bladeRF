@@ -57,7 +57,7 @@ void __init __bladerf_init(void) {
     bladerf_log_set_verbosity(BLADERF_LOG_LEVEL_INFO);
 #endif
 
-    log_info("BladeRF host software initializing");
+    log_info("BladeRF host software <-+-> initializing");
 }
 
 void __fini __bladerf_fini(void) {
