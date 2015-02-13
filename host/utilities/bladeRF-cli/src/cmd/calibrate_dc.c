@@ -26,6 +26,7 @@
 #include "common.h"
 #include "rel_assert.h"
 #include "thread.h"
+#include "log.h"
 
 #define CAL_SAMPLERATE  3000000u
 #define CAL_BANDWIDTH   BLADERF_BANDWIDTH_MIN
@@ -39,6 +40,79 @@
 #define CAL_DC_MAX      2048
 
 #define UPPER_BAND      15000000u
+
+#define _STR(x) #x
+#define STR(x) _STR(x)
+
+#if __STDC_VERSION__ < 199901L
+# if __GNUC__ >= 2
+#  define __func__ __FUNCTION__
+# endif
+#endif
+
+#if defined(__PRETTY_FUNCTION__)
+#define _FNC __PRETTY_FUNCTION__
+#elif defined (__FUNCTION__)
+#define _FNC __FUNCTION__
+#elif defined (__func__)
+#define _FNC __func__
+#elif defined (_func_)
+#define _FNC _func_
+#endif
+
+//#undef _FNC
+//#define _FNC "Hello world"
+
+#ifdef _FNC
+//#define FNC "in " STR(_FNC)
+#define FNC _FNC
+#else
+#define FNC NULL
+#endif
+
+static void notify_failure(
+        char *sassure, const char *sfun, char *sfile, int iline) {
+#if LOGGING_ENABLED
+#  ifdef LOG_INCLUDE_FILE_INFO
+    if (sfun!=NULL)
+        log_error("%s failed in [%s]\n", sassure, sfun);
+    else
+        log_error("%s failed\n", sassure);
+#  else
+    if (sfun!=NULL)
+        log_error("%s failed in [%s] @ [%s:%d]\n", sassure,
+                sfun, sfile, iline);
+    else
+        log_error("%s failed @ [%s:%d]\n", sassure,
+                sfile, iline);
+#  endif
+#else
+    if (sfun!=NULL)
+        fprintf(stderr, "ERROR: %s failed in [%s] @ [%s:%d]\n", sassure,
+                sfun, sfile, iline);
+    else
+        fprintf(stderr, "ERROR: %s failed @ [%s:%d]\n", sassure,
+                sfile, iline);
+    fflush(stderr);
+#endif
+}
+
+#define FLE strrchr(__FILE__, '/') ? strrchr(__FILE__, '/') + 1 : __FILE__
+#ifndef __GNUC__
+# define ASSURE(p) ((p) ? (void)0 : (void) notify_failure( \
+    #p, FNC, FLE, __LINE__ ) )
+# define ASSURE_E(p,e) if (!(p)) {(void) notify_failure( \
+    #p, FNC, FLE, __LINE__ ); e;}
+# define TRUEDO(p,e) if (p) {(void) notify_failure( \
+    #p, FNC, FLE, __LINE__ ); e;}
+#else
+# define ASSURE(p) ((p) ? (void)0 : (void) notify_failure( \
+    #p, __FUNCTION__, FLE, __LINE__ ) )
+# define ASSURE_E(p,e) if (!(p)) {(void) notify_failure( \
+    #p, __FUNCTION__, FLE, __LINE__ ); e;}
+# define TRUEDO(p,e) if (p) {(void) notify_failure( \
+    #p, __FUNCTION__, FLE, __LINE__ ); e;}
+#endif
 
 struct cal_tx_task {
     struct cli_state *s;
@@ -75,15 +149,11 @@ static inline int set_dc(struct bladerf *dev, bladerf_module module,
 
     status = bladerf_set_correction(dev, module,
                                     BLADERF_CORR_LMS_DCOFF_I, dc_i);
-    if (status != 0) {
-        return status;
-    }
+    TRUEDO(status != 0, return status);
 
     status = bladerf_set_correction(dev, module,
                                     BLADERF_CORR_LMS_DCOFF_Q, dc_q);
-    if (status != 0) {
-        return status;
-    }
+    TRUEDO(status != 0, return status);
 
     return 0;
 }
@@ -174,9 +244,7 @@ static int rx_avg(struct bladerf *dev, int16_t *samples,
     /* Flush out samples and read a buffer's worth of data */
     for (i = 0; i < 2 * CAL_NUM_BUFS + 1; i++) {
         status = bladerf_sync_rx(dev, samples, CAL_BUF_LEN, NULL, CAL_TIMEOUT);
-        if (status != 0) {
-            return status;
-        }
+        TRUEDO(status != 0, return status);
     }
 
     for (i = 0, accum_i = accum_q = 0; i < 2 * CAL_BUF_LEN; i += 2) {
@@ -217,47 +285,33 @@ int calibrate_dc_rx(struct cli_state *s,
 
     /* Ensure old samples are flushed */
     status = bladerf_enable_module(s->dev, BLADERF_MODULE_RX, false);
-    if (status != 0) {
-        goto out;
-    }
+    TRUEDO(status != 0, goto out);
 
 
     status = bladerf_sync_config(s->dev, BLADERF_MODULE_RX,
                                  BLADERF_FORMAT_SC16_Q11,
                                  CAL_NUM_BUFS, CAL_BUF_LEN,
                                  CAL_NUM_XFERS, CAL_TIMEOUT);
-    if (status != 0) {
-        goto out;
-    }
+    TRUEDO(status != 0, goto out);
 
     status = bladerf_enable_module(s->dev, BLADERF_MODULE_RX, true);
-    if (status != 0) {
-        goto out;
-    }
+    TRUEDO(status != 0, goto out);
 
     dc_i0 = dc_q0 = -512;
     dc_i1 = dc_q1 = 512;
 
     /* Get an initial set of sample points */
     status = set_rx_dc(s->dev, dc_i0, dc_q0);
-    if (status != 0) {
-        goto out;
-    }
+    TRUEDO(status != 0, goto out);
 
     status = rx_avg(s->dev, samples, &avg_i0, &avg_q0);
-    if (status != 0) {
-        goto out;
-    }
+    TRUEDO(status != 0, goto out);
 
     status = set_rx_dc(s->dev, dc_i1, dc_q1);
-    if (status != 0) {
-        goto out;
-    }
+    TRUEDO(status != 0, goto out);
 
     status = rx_avg(s->dev, samples, &avg_i1, &avg_q1);
-    if (status != 0) {
-        goto out;
-    }
+    TRUEDO(status != 0, goto out);
 
     status = interpolate(dc_i0, dc_i1, avg_i0, avg_i1, dc_i);
     if (status != 0) {
@@ -306,14 +360,10 @@ int calibrate_dc_rx(struct cli_state *s,
 
         /* See where we're at now... */
         status = set_rx_dc(s->dev, test_i[n], test_q[n]);
-        if (status != 0) {
-            goto out;
-        }
+        TRUEDO(status != 0, goto out);
 
         status = rx_avg(s->dev, samples, &tmp_i, &tmp_q);
-        if (status != 0) {
-            goto out;
-        }
+        TRUEDO(status != 0, goto out);
 
         if (abs(tmp_i) < abs(min_i)) {
             min_i = tmp_i;
@@ -338,9 +388,7 @@ int calibrate_dc_rx(struct cli_state *s,
     }
 
     status = set_rx_dc(s->dev, *dc_i, *dc_q);
-    if (status != 0) {
-        goto out;
-    }
+    TRUEDO(status != 0, goto out);
 
 out:
     free(samples);
@@ -398,9 +446,7 @@ static inline int start_tx_task(struct cal_tx_task *task)
     int status;
 
     status = pthread_create(&task->thread, NULL, exec_tx_task, task);
-    if (status != 0) {
-        return BLADERF_ERR_UNEXPECTED;
-    } else {
+    TRUEDO(status != 0, return BLADERF_ERR_UNEXPECTED) else {
         task->started = true;
         return 0;
     }
@@ -427,16 +473,12 @@ int rx_avg_magnitude(struct bladerf *dev, int16_t *samples,
     float var_i, var_q;
 
     status = set_tx_dc(dev, dc_i, dc_q);
-    if (status != 0) {
-        return status;
-    }
+    TRUEDO(status != 0, return status);
 
     /* Flush out samples and read a buffer's worth of data */
     for (i = 0; i < 2 * CAL_NUM_BUFS + 1; i++) {
         status = bladerf_sync_rx(dev, samples, CAL_BUF_LEN, NULL, CAL_TIMEOUT);
-        if (status != 0) {
-            return status;
-        }
+        TRUEDO(status != 0, return status);
     }
 
     variance(samples, &var_i, &var_q);
@@ -457,14 +499,10 @@ int calibrate_dc_tx(struct cli_state *s,
     struct point result;
 
     status = bladerf_get_frequency(s->dev, BLADERF_MODULE_RX, &rx_freq);
-    if (status != 0) {
-        return status;
-    }
+    TRUEDO(status != 0, return status);
 
     status = bladerf_get_frequency(s->dev, BLADERF_MODULE_TX, &tx_freq);
-    if (status != 0) {
-        return status;
-    }
+    TRUEDO(status != 0, return status);
 
     rx_samples = (int16_t*) malloc(CAL_BUF_LEN * 2 * sizeof(rx_samples[0]));
     if (rx_samples == NULL) {
@@ -479,9 +517,7 @@ int calibrate_dc_tx(struct cli_state *s,
 
     status = bladerf_set_frequency(s->dev, BLADERF_MODULE_TX,
                                    rx_freq + (CAL_SAMPLERATE / 4));
-    if (status != 0) {
-        goto out;
-    }
+    TRUEDO(status != 0, goto out);
 
     if (tx_freq < UPPER_BAND) {
         status = bladerf_set_loopback(s->dev, BLADERF_LB_RF_LNA1);
@@ -489,51 +525,35 @@ int calibrate_dc_tx(struct cli_state *s,
         status = bladerf_set_loopback(s->dev, BLADERF_LB_RF_LNA2);
     }
 
-    if (status != 0) {
-        goto out;
-    }
+    TRUEDO(status != 0, goto out);
 
     /* Ensure old samples are flushed */
     status = bladerf_enable_module(s->dev, BLADERF_MODULE_RX, false);
-    if (status != 0) {
-        goto out;
-    }
+    TRUEDO(status != 0, goto out);
 
     status = bladerf_enable_module(s->dev, BLADERF_MODULE_TX, false);
-    if (status != 0) {
-        goto out;
-    }
+    TRUEDO(status != 0, goto out);
 
     status = bladerf_sync_config(s->dev, BLADERF_MODULE_RX,
                                  BLADERF_FORMAT_SC16_Q11,
                                  CAL_NUM_BUFS, CAL_BUF_LEN,
                                  CAL_NUM_XFERS, CAL_TIMEOUT);
-    if (status != 0) {
-        goto out;
-    }
+    TRUEDO(status != 0, goto out);
 
     status = bladerf_sync_config(s->dev, BLADERF_MODULE_TX,
                                  BLADERF_FORMAT_SC16_Q11,
                                  CAL_NUM_BUFS, CAL_BUF_LEN,
                                  CAL_NUM_XFERS, CAL_TIMEOUT);
-    if (status != 0) {
-        goto out;
-    }
+    TRUEDO(status != 0, goto out);
 
     status = bladerf_enable_module(s->dev, BLADERF_MODULE_RX, true);
-    if (status != 0) {
-        goto out;
-    }
+    TRUEDO(status != 0, goto out);
 
     status = bladerf_enable_module(s->dev, BLADERF_MODULE_TX, true);
-    if (status != 0) {
-        goto out;
-    }
+    TRUEDO(status != 0, goto out);
 
     status = start_tx_task(&tx_task);
-    if (status != 0) {
-        goto out;
-    }
+    TRUEDO(status != 0, goto out);
 
     /* Sample the results of 4 points, which should yield 2 intersecting lines,
      * for 4 different DC offset settings of the I channel */
@@ -543,29 +563,19 @@ int calibrate_dc_tx(struct cli_state *s,
     p3.x = 2048;
 
     status = rx_avg_magnitude(s->dev, rx_samples, (int16_t) p0.x, 0, &p0.y);
-    if (status != 0) {
-        goto out;
-    }
+    TRUEDO(status != 0, goto out);
 
     status = rx_avg_magnitude(s->dev, rx_samples, (int16_t) p1.x, 0, &p1.y);
-    if (status != 0) {
-        goto out;
-    }
+    TRUEDO(status != 0, goto out);
 
     status = rx_avg_magnitude(s->dev, rx_samples, (int16_t) p2.x, 0, &p2.y);
-    if (status != 0) {
-        goto out;
-    }
+    TRUEDO(status != 0, goto out);
 
     status = rx_avg_magnitude(s->dev, rx_samples, (int16_t) p3.x, 0, &p3.y);
-    if (status != 0) {
-        goto out;
-    }
+    TRUEDO(status != 0, goto out);
 
     status = intersection(s, &p0, &p1, &p2, &p3, &result);
-    if (status != 0) {
-        goto out;
-    }
+    TRUEDO(status != 0, goto out);
 
     if (result.x < CAL_DC_MIN || result.x > CAL_DC_MAX) {
         cli_err(s, "Error", "Obtained out-of-range TX I DC cal value (%f).\n",
@@ -578,35 +588,23 @@ int calibrate_dc_tx(struct cli_state *s,
     *error_i = result.y;
 
     status = set_tx_dc(s->dev, *dc_i, 0);
-    if (status != 0) {
-        goto out;
-    }
+    TRUEDO(status != 0, goto out);
 
     /* Repeat for the Q channel */
     status = rx_avg_magnitude(s->dev, rx_samples, *dc_i, (int16_t) p0.x, &p0.y);
-    if (status != 0) {
-        goto out;
-    }
+    TRUEDO(status != 0, goto out);
 
     status = rx_avg_magnitude(s->dev, rx_samples, *dc_i, (int16_t) p1.x, &p1.y);
-    if (status != 0) {
-        goto out;
-    }
+    TRUEDO(status != 0, goto out);
 
     status = rx_avg_magnitude(s->dev, rx_samples, *dc_i, (int16_t) p2.x, &p2.y);
-    if (status != 0) {
-        goto out;
-    }
+    TRUEDO(status != 0, goto out);
 
     status = rx_avg_magnitude(s->dev, rx_samples, *dc_i, (int16_t) p3.x, &p3.y);
-    if (status != 0) {
-        goto out;
-    }
+    TRUEDO(status != 0, goto out);
 
     status = intersection(s, &p0, &p1, &p2, &p3, &result);
-    if (status != 0) {
-        goto out;
-    }
+    TRUEDO(status != 0, goto out);
 
     *dc_q = (int16_t) (result.x + 0.5);
     *error_q = result.y;
@@ -647,9 +645,7 @@ static inline int dummy_tx(struct bladerf *dev)
                                  CAL_NUM_BUFS, buf_len,
                                  CAL_NUM_XFERS, CAL_TIMEOUT);
 
-    if (status != 0) {
-        goto error;
-    }
+    TRUEDO(status != 0, goto error);
 
     status = bladerf_sync_tx(dev, buf, buf_len, NULL, CAL_TIMEOUT);
 
@@ -665,25 +661,17 @@ static inline int backup_and_update_settings(struct bladerf *dev,
     int status;
 
     status = bladerf_get_bandwidth(dev, module, &settings->bandwidth);
-    if (status != 0) {
-        return status;
-    }
+    TRUEDO(status != 0, return status);
 
     status = bladerf_get_frequency(dev, module, &settings->frequency);
-    if (status != 0) {
-        return status;
-    }
+    TRUEDO(status != 0, return status);
 
     status = bladerf_get_rational_sample_rate(dev, module,
                                               &settings->samplerate);
-    if (status != 0) {
-        return status;
-    }
+    TRUEDO(status != 0, return status);
 
     status = bladerf_set_bandwidth(dev, module, CAL_BANDWIDTH, NULL);
-    if (status != 0) {
-        return status;
-    }
+    TRUEDO(status != 0, return status);
 
     status = bladerf_set_sample_rate(dev, module, CAL_SAMPLERATE, NULL);
 
@@ -696,14 +684,10 @@ static inline int restore_settings(struct bladerf *dev, bladerf_module module,
     int status;
 
     status = bladerf_set_bandwidth(dev, module, settings->bandwidth, NULL);
-    if (status != 0) {
-        return status;
-    }
+    TRUEDO(status != 0, return status);
 
     status = bladerf_set_frequency(dev, module, settings->frequency);
-    if (status != 0) {
-        return status;
-    }
+    TRUEDO(status != 0, return status);
 
     status = bladerf_set_rational_sample_rate(dev, module,
                                               &settings->samplerate, NULL);
@@ -745,19 +729,13 @@ int calibrate_dc_gen_tbl(struct cli_state *s, bladerf_module module,
     assert(data_size <= UINT_MAX);
 
     status = backup_and_update_settings(s->dev, module, &settings);
-    if (status != 0) {
-        return status;
-    }
+    TRUEDO(status != 0, return status);
 
     status = bladerf_get_loopback(s->dev, &loopback_backup);
-    if (status != 0) {
-        return status;
-    }
+    TRUEDO(status != 0, return status);
 
     status = bladerf_lms_get_dc_cals(s->dev, &lms_dc_cals);
-    if (status != 0) {
-        goto out;
-    }
+    TRUEDO(status != 0, goto out);
 
     if (module == BLADERF_MODULE_RX) {
         image = bladerf_alloc_image(BLADERF_IMAGE_TYPE_RX_DC_CAL,
@@ -773,15 +751,11 @@ int calibrate_dc_gen_tbl(struct cli_state *s, bladerf_module module,
     }
 
     status = bladerf_get_serial(s->dev, image->serial);
-    if (status != 0) {
-        goto out;
-    }
+    TRUEDO(status != 0, goto out);
 
     if (module == BLADERF_MODULE_RX) {
         status = bladerf_set_loopback(s->dev, BLADERF_LB_NONE);
-        if (status != 0) {
-            goto out;
-        }
+        TRUEDO(status != 0, goto out);
     }
 
     off = 0;
@@ -818,9 +792,7 @@ int calibrate_dc_gen_tbl(struct cli_state *s, bladerf_module module,
         printf("  Calibrating @ %u Hz...", f);
 
         status = bladerf_set_frequency(s->dev, module, f);
-        if (status != 0) {
-            goto out;
-        }
+        TRUEDO(status != 0, goto out);
 
         if (module == BLADERF_MODULE_RX) {
             int16_t error_i, error_q;
@@ -834,9 +806,7 @@ int calibrate_dc_gen_tbl(struct cli_state *s, bladerf_module module,
                     dc_i, error_i, dc_q, error_q);
         }
 
-        if (status != 0) {
-            goto out;
-        }
+        TRUEDO(status != 0, goto out);
 
         fflush(stdout);
 
@@ -886,81 +856,55 @@ int calibrate_dc(struct cli_state *s, unsigned int ops)
     if (IS_RX_CAL(ops)) {
         status = backup_and_update_settings(s->dev, BLADERF_MODULE_RX,
                                             &rx_settings);
-        if (status != 0) {
-            return status;
-        }
+        TRUEDO(status != 0, return status);
     }
 
     if (IS_TX_CAL(ops)) {
         status = backup_and_update_settings(s->dev, BLADERF_MODULE_TX,
                                             &tx_settings);
-        if (status != 0) {
-            return status;
-        }
+        TRUEDO(status != 0, return status);
     }
 
     status = bladerf_get_loopback(s->dev, &loopback);
-    if (status != 0) {
-        return status;
-    }
+    TRUEDO(status != 0, return status);
 
     if (IS_RX_CAL(ops)) {
         status = set_rx_dc(s->dev, 0, 0);
-        if (status != 0) {
-            goto error;
-        }
+        TRUEDO(status != 0, goto error);
 
         status = bladerf_enable_module(s->dev, BLADERF_MODULE_RX, true);
-        if (status != 0) {
-            goto error;
-        }
+        TRUEDO(status != 0, goto error);
     }
 
     if (IS_TX_CAL(ops)) {
         status = bladerf_enable_module(s->dev, BLADERF_MODULE_RX, true);
-        if (status != 0) {
-            goto error;
-        }
+        TRUEDO(status != 0, goto error);
 
         status = bladerf_set_loopback(s->dev, BLADERF_LB_BB_TXVGA1_RXVGA2);
-        if (status != 0) {
-            goto error;
-        }
+        TRUEDO(status != 0, goto error);
 
         status = bladerf_enable_module(s->dev, BLADERF_MODULE_TX, true);
-        if (status != 0) {
-            goto error;
-        }
+        TRUEDO(status != 0, goto error);
 
         status = dummy_tx(s->dev);
-        if (status != 0) {
-            goto error;
-        }
+        TRUEDO(status != 0, goto error);
 
         status = bladerf_enable_module(s->dev, BLADERF_MODULE_TX, false);
-        if (status != 0) {
-            goto error;
-        }
+        TRUEDO(status != 0, goto error);
     }
 
     status = bladerf_set_loopback(s->dev, BLADERF_LB_NONE);
-    if (status != 0) {
-        goto error;
-    }
+    TRUEDO(status != 0, goto error);
 
     putchar('\n');
 
     if (IS_CAL(CAL_DC_LMS_TUNING, ops)) {
         printf("  Calibrating LMS LPF tuning module...\n");
         status = bladerf_calibrate_dc(s->dev, BLADERF_DC_CAL_LPF_TUNING);
-        if (status != 0) {
-            goto error;
-        } else {
+        TRUEDO(status != 0, goto error) else {
             struct bladerf_lms_dc_cals dc_cals;
             status = bladerf_lms_get_dc_cals(s->dev, &dc_cals);
-            if (status != 0) {
-                goto error;
-            }
+            TRUEDO(status != 0, goto error);
 
             printf("    LPF tuning module: %d\n\n", dc_cals.lpf_tuning);
         }
@@ -969,14 +913,10 @@ int calibrate_dc(struct cli_state *s, unsigned int ops)
     if (IS_CAL(CAL_DC_LMS_TXLPF, ops)) {
         printf("  Calibrating LMS TX LPF modules...\n");
         status = bladerf_calibrate_dc(s->dev, BLADERF_DC_CAL_TX_LPF);
-        if (status != 0) {
-            goto error;
-        } else {
+        TRUEDO(status != 0, goto error) else {
             struct bladerf_lms_dc_cals dc_cals;
             status = bladerf_lms_get_dc_cals(s->dev, &dc_cals);
-            if (status != 0) {
-                goto error;
-            }
+            TRUEDO(status != 0, goto error);
 
             printf("    TX LPF I filter: %d\n", dc_cals.tx_lpf_i);
             printf("    TX LPF Q filter: %d\n\n", dc_cals.tx_lpf_q);
@@ -986,14 +926,10 @@ int calibrate_dc(struct cli_state *s, unsigned int ops)
     if (IS_CAL(CAL_DC_LMS_RXLPF, ops)) {
         printf("  Calibrating LMS RX LPF modules...\n");
         status = bladerf_calibrate_dc(s->dev, BLADERF_DC_CAL_RX_LPF);
-        if (status != 0) {
-            goto error;
-        } else {
+        TRUEDO(status != 0, goto error) else {
             struct bladerf_lms_dc_cals dc_cals;
             status = bladerf_lms_get_dc_cals(s->dev, &dc_cals);
-            if (status != 0) {
-                goto error;
-            }
+            TRUEDO(status != 0, goto error);
 
             printf("    RX LPF I filter: %d\n", dc_cals.rx_lpf_i);
             printf("    RX LPF Q filter: %d\n\n", dc_cals.rx_lpf_q);
@@ -1003,14 +939,10 @@ int calibrate_dc(struct cli_state *s, unsigned int ops)
     if (IS_CAL(CAL_DC_LMS_RXVGA2, ops)) {
         printf("  Calibrating LMS RXVGA2 modules...\n");
         status = bladerf_calibrate_dc(s->dev, BLADERF_DC_CAL_RXVGA2);
-        if (status != 0) {
-            goto error;
-        } else {
+        TRUEDO(status != 0, goto error ) else {
             struct bladerf_lms_dc_cals dc_cals;
             status = bladerf_lms_get_dc_cals(s->dev, &dc_cals);
-            if (status != 0) {
-                goto error;
-            }
+            TRUEDO(status != 0, goto error);
 
             printf("    RX VGA2 DC reference module: %d\n", dc_cals.dc_ref);
             printf("    RX VGA2 stage 1, I channel: %d\n", dc_cals.rxvga2a_i);
@@ -1024,9 +956,7 @@ int calibrate_dc(struct cli_state *s, unsigned int ops)
     if (IS_CAL(CAL_DC_AUTO_RX, ops)) {
         int16_t avg_i, avg_q;
         status = calibrate_dc_rx(s, &dc_i, &dc_q, &avg_i, &avg_q);
-        if (status != 0) {
-            goto error;
-        } else {
+        TRUEDO(status != 0, goto error) else {
             printf("  RX DC I Setting = %d, error ~= %d\n", dc_i, avg_i);
             printf("  RX DC Q Setting = %d, error ~= %d\n\n", dc_q, avg_q);
         }
@@ -1035,9 +965,7 @@ int calibrate_dc(struct cli_state *s, unsigned int ops)
     if (IS_CAL(CAL_DC_AUTO_TX, ops)) {
         float error_i, error_q;
         status = calibrate_dc_tx(s, &dc_i, &dc_q, &error_i, &error_q);
-        if (status != 0) {
-            goto error;
-        } else {
+        TRUEDO(status != 0, goto error ) else {
             printf("  TX DC I Setting = %d, error ~= %f\n", dc_i, error_i);
             printf("  TX DC Q Setting = %d, error ~= %f\n\n", dc_q, error_q);
         }
